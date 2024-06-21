@@ -34,7 +34,7 @@ def signup_account():
   while True: 
     try:
         mycursor.execute(f"""INSERT INTO `Users` (`ID`, `Name`, `Email`, `Password`, `Role`, `AccountStatus`) VALUES 
-                            ('{account_id}', '{name}', '{email}', '{password}', '{account_type}', 'inactive');
+                            ('{account_id}', '{name}', '{email}', '{password}', '{account_type}', 'pending');
                             """)
         mydb.commit()
         mydb.close()
@@ -115,7 +115,6 @@ def get_accounts_info():
 def update_user_status():
   account_id = request.form.get('id') if request.form.get('id') else request.get_json()['id']
   status = request.form.get('status') if request.form.get('status') else request.get_json()['status']
-  print(status)
   try:
     mydb = mysql.connector.connect(
       host=host_name,
@@ -138,6 +137,7 @@ def update_user_status():
 @app.route('/delete_user', methods=['DELETE'])
 def delete_user():
   account_id = request.args.get('id')
+  account_status = request.args.get('status')
   try:
     mydb = mysql.connector.connect(
       host=host_name,
@@ -145,9 +145,10 @@ def delete_user():
       password=pass_database,
       database=database_name
       )
-    mycursor = mydb.cursor(dictionary=True)
+    mycursor = mydb.cursor()
     mycursor.execute(f"""DELETE FROM Users WHERE ID = '{account_id}'
                               """)
+
     mydb.commit()
     mydb.close()
     return "true", 200
