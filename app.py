@@ -156,6 +156,27 @@ def delete_user():
   except Exception as e:
     print(e)
     return str(e), 400
+  
+@app.route('/delete_users', methods=['DELETE'])
+def delete_users():
+  try:
+    mydb = mysql.connector.connect(
+      host=host_name,
+      user=user_name_database,
+      password=pass_database,
+      database=database_name
+      )
+    mycursor = mydb.cursor()
+    mycursor.execute(f"""DELETE FROM Users WHERE AccountStatus='deleted' AND Role='volunteer'
+                              """)
+
+    mydb.commit()
+    mydb.close()
+    return "true", 200
+  
+  except Exception as e:
+    print(e)
+    return str(e), 400
     
 
 # main driver function
