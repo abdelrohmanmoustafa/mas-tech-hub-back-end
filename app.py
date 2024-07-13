@@ -221,7 +221,7 @@ def add_driver():
                             """)
         mydb.commit()
         mydb.close()
-        return "true", 200
+        return jsonify({"DriverName": driver_name, "DriverStatus": status, "DriverID": account_id}), 200
       
     except Exception as e:
         mydb.commit()
@@ -233,7 +233,173 @@ def add_driver():
         
         return error, 400
 
+@app.route('/delete_driver', methods=['DELETE'])
+def delete_driver():
+  driver_id = request.args.get('id')
+  account_status = request.args.get('status')
+  try:
+    mydb = mysql.connector.connect(
+      host=host_name,
+      user=user_name_database,
+      password=pass_database,
+      database=database_name
+      )
+    mycursor = mydb.cursor()
+    if account_status == "deleted":
+      mycursor.execute(f"""DELETE FROM Drivers WHERE DriverID='{driver_id}'
+                              """)
+    else:
+      mycursor.execute(f"""UPDATE Drivers SET DriverStatus = 'deleted' WHERE DriverID='{driver_id}'
+                              """)
+
+    mydb.commit()
+    mydb.close()
+    return "true", 200
+  
+  except Exception as e:
+    print(e)
+    return str(e), 400
+
+@app.route('/add_truck_operation', methods=['POST'])
+def add_truck_operation():
+  truck_location = request.form.get('truckLocation') if request.form.get('truckLocation') else request.get_json()['truckLocation']
+  booth_location = request.form.get('boothLocation') if request.form.get('boothLocation') else request.get_json()['boothLocation']
+  operation_request = request.form.get('request') if request.form.get('request') else request.get_json()['request']
+  notes = request.form.get('notes') if request.form.get('notes') else request.get_json()['notes']
+  priority = request.form.get('priority') if request.form.get('priority') else request.get_json()['priority']
+  driver_id = request.form.get('assignedDriver') if request.form.get('assignedDriver') else request.get_json()['assignedDriver']
+  operation_id = uuid.uuid4().hex
+  status = "active"
+  
+  mydb = mysql.connector.connect(
+    host=host_name,
+    user=user_name_database,
+    password=pass_database,
+    database=database_name
+    )
+  mycursor = mydb.cursor()
+  
+  while True: 
+    try:
+        mycursor.execute(f"""INSERT INTO `TruckOperations` (`ID`, `TruckLocation`, `BoothLocation`, `Request`, `Notes`, `Priority`, `AssignedDriver`, `OperationStatus`) VALUES 
+                            ('{operation_id}', '{truck_location}', '{booth_location}', '{operation_request}', '{notes}', '{priority}', '{driver_id}', '{status}');
+                            """)
+        mydb.commit()
+        mydb.close()
+        return "true", 200
+      
+    except Exception as e:
+        mydb.commit()
+        mydb.close()
+        error = str(e)
+        if 'TruckOperations.PRIMARY' in error:
+            operation_id = uuid.uuid4().hex
+            continue
+        
+        return error, 400  
+      
+@app.route('/get_truck_operation', methods=['GET'])
+def get_truck_operation():
+  try:
+    mydb = mysql.connector.connect(
+      host=host_name,
+      user=user_name_database,
+      password=pass_database,
+      database=database_name
+      )
+    mycursor = mydb.cursor(dictionary=True)
+    mycursor.execute(f"""
+    SELECT * From TruckOperations, Drivers WHERE TruckOperations.AssignedDriver=Drivers.DriverID AND TruckOperations.OperationStatus!='resolved';
+                              """)
+    truck_operations_result = mycursor.fetchall()
+
+    mycursor.execute(f"""
+    Select * from Drivers
+                              """)
+    driver_result = mycursor.fetchall()
+
+    result = {"drivers": driver_result, "truck_operations": truck_operations_result}
+
+    return jsonify(result), 200
+  
+  except Exception as e:
+    print(e)
+    return str(e), 400
+  
+@app.route('/delete_truck_operation', methods=['DELETE'])
+def delete_truck_operation():
+  operation_id = request.args.get('id')
+  operation_status = request.args.get('status')
+  try:
+    mydb = mysql.connector.connect(
+      host=host_name,
+      user=user_name_database,
+      password=pass_database,
+      database=database_name
+      )
+    mycursor = mydb.cursor()
+    if operation_status == "deleted":
+      mycursor.execute(f"""DELETE FROM TruckOperations WHERE ID='{operation_id}'
+                              """)
+    else:
+      mycursor.execute(f"""UPDATE TruckOperations SET OperationStatus = 'deleted' WHERE ID='{operation_id}'
+                              """)
+
+    mydb.commit()
+    mydb.close()
+    return "true", 200
+  
+  except Exception as e:
+    print(e)
+    return str(e), 400
+  
+@app.route('/update_truck_operation', methods=['PUT'])
+def update_truck_operation():
+  operation_id = request.form.get('id') if request.form.get('id') else request.get_json()['id']
+  operation_status = request.form.get('status') if request.form.get('status') else request.get_json()['status']
+  try:
+    mydb = mysql.connector.connect(
+      host=host_name,
+      user=user_name_database,
+      password=pass_database,
+      database=database_name
+      )
+    mycursor = mydb.cursor()
     
+    mycursor.execute(f"""UPDATE TruckOperations SET OperationStatus = '{operation_status}' WHERE ID='{operation_id}'
+                              """)
+
+    mydb.commit()
+    mydb.close()
+    return "true", 200
+  
+  except Exception as e:
+    print(e)
+    return str(e), 400
+  
+@app.route('/get_resolved_truck_oeprations', methods=['GET'])
+def get_resolved_truck_oeprations():
+  try:
+    mydb = mysql.connector.connect(
+      host=host_name,
+      user=user_name_database,
+      password=pass_database,
+      database=database_name
+      )
+    mycursor = mydb.cursor(dictionary=True)
+    mycursor.execute(f"""
+    SELECT * From TruckOperations, Drivers WHERE TruckOperations.AssignedDriver=Drivers.DriverID and TruckOperations.OperationStatus='resolved';
+                              """)
+    
+    result = mycursor.fetchall()
+    result = {"truck_operations": result}
+
+    return jsonify(result), 200
+  
+  except Exception as e:
+    print(e)
+    return str(e), 400
+  
 
 # main driver function
 if __name__ == '__main__':
