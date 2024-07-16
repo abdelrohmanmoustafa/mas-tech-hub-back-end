@@ -188,7 +188,12 @@ def get_truck_drivers():
       database=database_name
       )
     mycursor = mydb.cursor(dictionary=True)
-    mycursor.execute(f"""Select * from Drivers
+    mycursor.execute(f"""
+                    SELECT Drivers.*, TruckOperations.*
+                    FROM Drivers
+                    LEFT JOIN TruckOperations 
+                    ON Drivers.DriverID = TruckOperations.AssignedDriver
+                    AND TruckOperations.OperationStatus = 'active';
                               """)
     
     result = mycursor.fetchall()
@@ -204,7 +209,7 @@ def add_driver():
   driver_name = request.form.get('driverName') if request.form.get('driverName') else request.get_json()['driverName']
   account_creator_id = request.form.get('accountID') if request.form.get('accountID') else request.get_json()['accountID']
   account_id = uuid.uuid4().hex
-  status = "active"
+  status = "available" 
   
   mydb = mysql.connector.connect(
     host=host_name,
@@ -259,6 +264,30 @@ def delete_driver():
   except Exception as e:
     print(e)
     return str(e), 400
+  
+@app.route('/reinstate_driver', methods=['PUT'])
+def reinstate_driver():
+  driver_id = request.form.get('id') if request.form.get('id') else request.get_json()['id']
+  try:
+    mydb = mysql.connector.connect(
+      host=host_name,
+      user=user_name_database,
+      password=pass_database,
+      database=database_name
+      )
+    mycursor = mydb.cursor()
+    mycursor.execute(f"""
+      UPDATE Drivers SET DriverStatus='available' WHERE DriverID='{driver_id}' 
+                              """)
+    
+
+    mydb.commit()
+    mydb.close()
+    return "true", 200
+  
+  except Exception as e:
+    print(e)
+    return str(e), 400
 
 @app.route('/add_truck_operation', methods=['POST'])
 def add_truck_operation():
@@ -277,16 +306,25 @@ def add_truck_operation():
     password=pass_database,
     database=database_name
     )
-  mycursor = mydb.cursor()
+  mycursor = mydb.cursor(dictionary=True)
   
   while True: 
     try:
         mycursor.execute(f"""INSERT INTO `TruckOperations` (`ID`, `TruckLocation`, `BoothLocation`, `Request`, `Notes`, `Priority`, `AssignedDriver`, `OperationStatus`) VALUES 
                             ('{operation_id}', '{truck_location}', '{booth_location}', '{operation_request}', '{notes}', '{priority}', '{driver_id}', '{status}');
                             """)
+        mycursor.execute(f"""
+            UPDATE Drivers SET DriverStatus = 'placed' WHERE DriverID='{driver_id}';
+                         """)
+        mycursor.execute(f"""
+        SELECT * From TruckOperations, Drivers WHERE TruckOperations.AssignedDriver=Drivers.DriverID AND TruckOperations.ID='{operation_id}';
+                         """)
+        truck_operation = {"operation": [mycursor.fetchone()]}
+        
         mydb.commit()
         mydb.close()
-        return "true", 200
+        
+        return jsonify(truck_operation), 200
       
     except Exception as e:
         mydb.commit()
@@ -314,7 +352,7 @@ def get_truck_operation():
     truck_operations_result = mycursor.fetchall()
 
     mycursor.execute(f"""
-    Select * from Drivers
+    Select * from Drivers WHERE DriverStatus='available';
                               """)
     driver_result = mycursor.fetchall()
 
@@ -330,6 +368,7 @@ def get_truck_operation():
 def delete_truck_operation():
   operation_id = request.args.get('id')
   operation_status = request.args.get('status')
+  driver_id = request.args.get('driver_id')
   try:
     mydb = mysql.connector.connect(
       host=host_name,
@@ -341,9 +380,15 @@ def delete_truck_operation():
     if operation_status == "deleted":
       mycursor.execute(f"""DELETE FROM TruckOperations WHERE ID='{operation_id}'
                               """)
+      mycursor.execute(f"""
+            UPDATE Drivers SET DriverStatus = 'available' WHERE DriverID='{driver_id}';
+                         """)
     else:
       mycursor.execute(f"""UPDATE TruckOperations SET OperationStatus = 'deleted' WHERE ID='{operation_id}'
                               """)
+      mycursor.execute(f"""
+            UPDATE Drivers SET DriverStatus = 'available' WHERE DriverID='{driver_id}';
+                         """)
 
     mydb.commit()
     mydb.close()
@@ -357,6 +402,7 @@ def delete_truck_operation():
 def update_truck_operation():
   operation_id = request.form.get('id') if request.form.get('id') else request.get_json()['id']
   operation_status = request.form.get('status') if request.form.get('status') else request.get_json()['status']
+  driver_id = request.form.get('assignedDriver') if request.form.get('assignedDriver') else request.get_json()['assignedDriver']
   try:
     mydb = mysql.connector.connect(
       host=host_name,
@@ -368,7 +414,11 @@ def update_truck_operation():
     
     mycursor.execute(f"""UPDATE TruckOperations SET OperationStatus = '{operation_status}' WHERE ID='{operation_id}'
                               """)
-
+    if operation_status == "resolved":
+      mycursor.execute(f"""
+            UPDATE Drivers SET DriverStatus = 'available' WHERE DriverID='{driver_id}';
+                         """)
+      
     mydb.commit()
     mydb.close()
     return "true", 200
